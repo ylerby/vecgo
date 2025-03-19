@@ -3,12 +3,12 @@ package hnsw
 
 import (
 	"container/heap"
+	"github.com/RoaringBitmap/roaring"
 	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 
-	"github.com/bits-and-blooms/bitset"
 	"github.com/ylerby/vecgo/index"
 	"github.com/ylerby/vecgo/queue"
 )
@@ -48,9 +48,9 @@ type Options struct {
 }
 
 var DefaultOptions = Options{
-	M:            8,
-	EF:           200,
-	Heuristic:    true,
+	M:            24,
+	EF:           500,
+	Heuristic:    false,
 	DistanceType: index.DistanceTypeSquaredL2,
 }
 
@@ -73,6 +73,8 @@ type HNSW struct {
 
 	initOnce   *sync.Once
 	insertOnce *sync.Once
+
+	deletedQueries *SyncMap
 }
 
 // New creates a new HNSW instance with the given options
@@ -90,11 +92,12 @@ func New(optFns ...func(o *Options)) *HNSW {
 	}
 
 	return &HNSW{
-		mmax:         opts.M,
-		mmax0:        2 * opts.M,
-		ml:           1 / math.Log(1.0*float64(opts.M)),
-		distanceFunc: index.NewDistanceFunc(opts.DistanceType),
-		opts:         opts,
+		mmax:           opts.M,
+		mmax0:          2 * opts.M,
+		ml:             1 / math.Log(1.0*float64(opts.M)),
+		distanceFunc:   index.NewDistanceFunc(opts.DistanceType),
+		opts:           opts,
+		deletedQueries: NewSyncMap(0),
 
 		initOnce:   &sync.Once{},
 		insertOnce: &sync.Once{},
@@ -413,9 +416,9 @@ type searchParams struct {
 
 // searchLayer performs a search in a specified layer of the HNSW graph
 func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
-	var visited bitset.BitSet
+	visited := roaring.New()
 
-	visited.Set(uint(params.EntryPoint.Node))
+	visited.Add(params.EntryPoint.Node)
 
 	// Add the new candidate to our queue
 	candidates := queue.NewMin(params.EF)
@@ -442,12 +445,17 @@ func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
 			conns := node.Connections[params.Level]
 
 			for _, n := range conns {
-				if !visited.Test(uint(n)) {
-					visited.Set(uint(n))
+
+				if !visited.Contains(n) {
+					visited.Add(n)
 
 					distance, err := h.distanceFunc(params.Query, h.nodes[n].Vector)
 					if err != nil {
 						return nil, err
+					}
+
+					if _, ok := h.deletedQueries.LoadWithStatus(convertSliceToArr(params.Query)); ok {
+						continue
 					}
 
 					item := &queue.PriorityQueueItem{
@@ -477,6 +485,20 @@ func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
 	}
 
 	return topCandidates, nil
+}
+
+func convertSliceToArr(sl []float32) [128]float32 {
+	arr := [128]float32{}
+
+	if len(sl) > 128 {
+		sl = sl[:128]
+	}
+
+	for i := range sl {
+		arr[i] = sl[i]
+	}
+
+	return arr
 }
 
 // selectNeighboursSimple selects the nearest neighbors using a simple approach
@@ -596,4 +618,35 @@ func (h *HNSW) findEP(q []float32, currObj *Node) (*Node, float32, error) {
 	}
 
 	return match, currDist, nil
+}
+
+// Remove deletes the node with the given ID from the HNSW graph and updates the connections accordingly.
+func (h *HNSW) Remove(q []float32, k int, efSearch int, filter func(id uint32) bool) error {
+	if h.isEmpty() {
+		return nil
+	}
+
+	ep, currDist, err := h.findEP(q, h.nodes[h.ep])
+	if err != nil {
+		return err
+	}
+
+	topCandidates, err := h.searchLayer(&searchParams{
+		Query:      q,
+		EntryPoint: &queue.PriorityQueueItem{Distance: currDist, Node: ep.ID},
+		EF:         efSearch,
+		Level:      0,
+		Filter:     filter,
+	})
+	if err != nil {
+		return err
+	}
+
+	for topCandidates.Len() > k {
+		_ = heap.Pop(topCandidates)
+	}
+
+	h.deletedQueries.Store(convertSliceToArr(q))
+
+	return nil
 }

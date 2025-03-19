@@ -106,7 +106,7 @@ func (f *Flat) Insert(v []float32) (uint32, error) {
 }
 
 // KNNSearch performs a K-nearest neighbor search in the flat index.
-func (f *Flat) KNNSearch(q []float32, k int, efSearch int, filter func(id uint32) bool) ([]index.SearchResult, error) {
+func (f *Flat) KNNSearch(q []float32, k int, _ int, filter func(id uint32) bool) ([]index.SearchResult, error) {
 	return f.BruteSearch(q, k, filter)
 }
 
@@ -168,4 +168,8 @@ func (f *Flat) isEmpty() bool {
 	defer f.RUnlock()
 
 	return len(f.nodes) == 0
+}
+
+func (f *Flat) Remove(_ []float32, _ int, _ int, _ func(id uint32) bool) error {
+	return nil
 }

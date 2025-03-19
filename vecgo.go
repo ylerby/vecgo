@@ -4,6 +4,7 @@ package vecgo
 import (
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -258,4 +259,27 @@ func (vg *Vecgo[T]) SaveToFile(filename string) error {
 // PrintStats prints statistics about the database.
 func (vg *Vecgo[T]) PrintStats() {
 	vg.index.Stats()
+}
+
+// Remove удаляет запись по входному вектору.
+func (vg *Vecgo[T]) Remove(query []float32, k int, optFns ...func(o *KNNSearchOptions)) error {
+	opts := KNNSearchOptions{
+		EF:         50,
+		FilterFunc: func(id uint32) bool { return true },
+	}
+
+	for _, fn := range optFns {
+		fn(&opts)
+	}
+
+	if opts.EF < k {
+		return ErrInvalidEFValue
+	}
+
+	err := vg.index.Remove(query, k, opts.EF, opts.FilterFunc)
+	if err != nil {
+		return fmt.Errorf("failed to remove from index: %v", err)
+	}
+
+	return nil
 }
