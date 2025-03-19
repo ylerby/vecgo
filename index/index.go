@@ -80,4 +80,6 @@ type Index interface {
 
 	// Stats prints statistics about the index
 	Stats()
+
+	Remove(q []float32, k int, efSearch int, filter func(id uint32) bool) error
 }
