@@ -27,7 +27,7 @@ func CosineSimilarity(v1, v2 []float32) (float32, error) {
 		return 0, nil
 	}
 
-	return dotProduct / math32.Sqrt(sumA*sumB), nil
+	return (dotProduct/math32.Sqrt(sumA*sumB))*(-1) + 1, nil
 }
 
 // SquaredL2 calculates the squared L2 distance between two float32 slices.

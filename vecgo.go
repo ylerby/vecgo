@@ -163,7 +163,7 @@ type KNNSearchOptions struct {
 // KNNSearch performs a K-nearest neighbor search.
 func (vg *Vecgo[T]) KNNSearch(query []float32, k int, optFns ...func(o *KNNSearchOptions)) ([]SearchResult[T], error) {
 	opts := KNNSearchOptions{
-		EF:         50,
+		EF:         500,
 		FilterFunc: func(id uint32) bool { return true },
 	}
 

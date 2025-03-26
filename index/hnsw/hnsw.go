@@ -51,7 +51,7 @@ var DefaultOptions = Options{
 	M:            24,
 	EF:           500,
 	Heuristic:    false,
-	DistanceType: index.DistanceTypeSquaredL2,
+	DistanceType: index.DistanceTypeCosineSimilarity,
 }
 
 // HNSW represents the Hierarchical Navigable Small World graph
