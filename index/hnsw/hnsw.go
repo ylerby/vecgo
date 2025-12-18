@@ -3,7 +3,7 @@ package hnsw
 
 import (
 	"container/heap"
-	"github.com/RoaringBitmap/roaring"
+	"github.com/kelindar/bitmap"
 	"math"
 	"math/rand"
 	"sync"
@@ -413,9 +413,9 @@ type searchParams struct {
 
 // searchLayer performs a search in a specified layer of the HNSW graph
 func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
-	visited := roaring.New()
+	visited := bitmap.Bitmap{}
 
-	visited.Add(params.EntryPoint.Node)
+	visited.Set(params.EntryPoint.Node)
 
 	// Add the new candidate to our queue
 	candidates := queue.NewMin(params.EF)
@@ -444,7 +444,7 @@ func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
 			for _, n := range conns {
 
 				if !visited.Contains(n) {
-					visited.Add(n)
+					visited.Set(n)
 
 					distance, err := h.distanceFunc(params.Query, h.nodes[n].Vector)
 					if err != nil {
