@@ -173,3 +173,7 @@ func (f *Flat) isEmpty() bool {
 func (f *Flat) Remove(_ []float32, _ int, _ int, _ func(id uint32) bool) error {
 	return nil
 }
+
+func (f *Flat) GetDistanceBetweenVectors(_, _ []float32) float32 {
+	return 0
+}

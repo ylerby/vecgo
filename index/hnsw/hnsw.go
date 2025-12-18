@@ -48,8 +48,8 @@ type Options struct {
 }
 
 var DefaultOptions = Options{
-	M:            24,
-	EF:           500,
+	M:            100,
+	EF:           1000,
 	Heuristic:    false,
 	DistanceType: index.DistanceTypeCosineSimilarity,
 }
@@ -73,8 +73,6 @@ type HNSW struct {
 
 	initOnce   *sync.Once
 	insertOnce *sync.Once
-
-	deletedQueries *SyncMap
 }
 
 // New creates a new HNSW instance with the given options
@@ -92,12 +90,11 @@ func New(optFns ...func(o *Options)) *HNSW {
 	}
 
 	return &HNSW{
-		mmax:           opts.M,
-		mmax0:          2 * opts.M,
-		ml:             1 / math.Log(1.0*float64(opts.M)),
-		distanceFunc:   index.NewDistanceFunc(opts.DistanceType),
-		opts:           opts,
-		deletedQueries: NewSyncMap(0),
+		mmax:         opts.M,
+		mmax0:        2 * opts.M,
+		ml:           1 / math.Log(1.0*float64(opts.M)),
+		distanceFunc: index.NewDistanceFunc(opts.DistanceType),
+		opts:         opts,
 
 		initOnce:   &sync.Once{},
 		insertOnce: &sync.Once{},
@@ -454,10 +451,6 @@ func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
 						return nil, err
 					}
 
-					if _, ok := h.deletedQueries.LoadWithStatus(convertSliceToArr(params.Query)); ok {
-						continue
-					}
-
 					item := &queue.PriorityQueueItem{
 						Distance: distance,
 						Node:     n,
@@ -485,20 +478,6 @@ func (h *HNSW) searchLayer(params *searchParams) (*queue.PriorityQueue, error) {
 	}
 
 	return topCandidates, nil
-}
-
-func convertSliceToArr(sl []float32) [128]float32 {
-	arr := [128]float32{}
-
-	if len(sl) > 128 {
-		sl = sl[:128]
-	}
-
-	for i := range sl {
-		arr[i] = sl[i]
-	}
-
-	return arr
 }
 
 // selectNeighboursSimple selects the nearest neighbors using a simple approach
@@ -646,7 +625,10 @@ func (h *HNSW) Remove(q []float32, k int, efSearch int, filter func(id uint32) b
 		_ = heap.Pop(topCandidates)
 	}
 
-	h.deletedQueries.Store(convertSliceToArr(q))
-
 	return nil
+}
+
+func (h *HNSW) GetDistanceBetweenVectors(firstVector, secondVector []float32) float32 {
+	distance, _ := h.distanceFunc(firstVector, secondVector)
+	return distance
 }

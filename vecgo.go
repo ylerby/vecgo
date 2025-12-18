@@ -163,7 +163,7 @@ type KNNSearchOptions struct {
 // KNNSearch performs a K-nearest neighbor search.
 func (vg *Vecgo[T]) KNNSearch(query []float32, k int, optFns ...func(o *KNNSearchOptions)) ([]SearchResult[T], error) {
 	opts := KNNSearchOptions{
-		EF:         500,
+		EF:         1000,
 		FilterFunc: func(id uint32) bool { return true },
 	}
 
@@ -282,4 +282,8 @@ func (vg *Vecgo[T]) Remove(query []float32, k int, optFns ...func(o *KNNSearchOp
 	}
 
 	return nil
+}
+
+func (vg *Vecgo[T]) GetDistanceBetweenVectors(firstVector, secondVector []float32) float32 {
+	return vg.index.GetDistanceBetweenVectors(firstVector, secondVector)
 }
