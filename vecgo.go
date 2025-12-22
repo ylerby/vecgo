@@ -9,6 +9,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/fxamacker/cbor/v2"
+	"github.com/vmihailenco/msgpack/v5"
 	"github.com/ylerby/vecgo/index"
 	"github.com/ylerby/vecgo/index/flat"
 	"github.com/ylerby/vecgo/index/hnsw"
@@ -24,8 +26,8 @@ var (
 
 // Vecgo is a vector store database.
 type Vecgo[T any] struct {
-	index index.Index
-	store map[uint32]T
+	index index.Index  `cbor:"1,keyasint" msgpack:"idx"`
+	store map[uint32]T `cbor:"2,keyasint,omitempty" msgpack:"store,omitempty"`
 	mutex sync.Mutex
 }
 
@@ -96,6 +98,45 @@ func NewFromReader[T any](r io.Reader) (*Vecgo[T], error) {
 	// Decode the store
 	if err := decoder.Decode(&vg.store); err != nil {
 		return nil, err
+	}
+
+	return vg, nil
+}
+
+func NewFromReaderWithCborDecoder[T any](r io.Reader) (*Vecgo[T], error) {
+	decoder := cbor.NewDecoder(r)
+
+	vg := &Vecgo[T]{}
+	newIndex := hnsw.New()
+
+	if err := decoder.Decode(newIndex); err != nil {
+		return nil, fmt.Errorf("failed to decode index: %w", err)
+	}
+
+	vg.index = newIndex
+
+	if err := decoder.Decode(&vg.store); err != nil {
+		return nil, fmt.Errorf("failed to decode store: %w", err)
+	}
+
+	return vg, nil
+}
+
+func NewFromReaderWithMsgpackDecoder[T any](r io.Reader) (*Vecgo[T], error) {
+	decoder := msgpack.NewDecoder(r)
+
+	decoder.SetCustomStructTag("msgpack")
+
+	vg := &Vecgo[T]{}
+	newIndex := hnsw.New()
+
+	if err := decoder.Decode(newIndex); err != nil {
+		return nil, fmt.Errorf("failed to decode index: %w", err)
+	}
+	vg.index = newIndex
+
+	if err := decoder.Decode(&vg.store); err != nil {
+		return nil, fmt.Errorf("failed to decode store: %w", err)
 	}
 
 	return vg, nil
@@ -240,6 +281,37 @@ func (vg *Vecgo[T]) SaveToWriter(w io.Writer) error {
 	// Encode the store
 	if err := encoder.Encode(vg.store); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (vg *Vecgo[T]) SaveToWriterWithCborEncode(w io.Writer) error {
+	encoder := cbor.NewEncoder(w)
+
+	if err := encoder.Encode(vg.index); err != nil {
+		return fmt.Errorf("failed to encode index: %w", err)
+	}
+
+	if err := encoder.Encode(&vg.store); err != nil {
+		return fmt.Errorf("failed to encode store: %w", err)
+	}
+
+	return nil
+}
+
+func (vg *Vecgo[T]) SaveToWriterWithMsgpackEncoder(w io.Writer) error {
+	encoder := msgpack.NewEncoder(w)
+
+	encoder.SetCustomStructTag("msgpack")
+	encoder.UseCompactInts(true)
+
+	if err := encoder.Encode(vg.index); err != nil {
+		return fmt.Errorf("failed to encode index: %w", err)
+	}
+
+	if err := encoder.Encode(&vg.store); err != nil {
+		return fmt.Errorf("failed to encode store: %w", err)
 	}
 
 	return nil
